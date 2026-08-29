@@ -1,0 +1,10 @@
+{
+  "name": "badminton-tracker",
+  "version": "1.0.0",
+  "scripts": {
+    "build":   "cd frontend && npm run build",
+    "start":   "cd backend  && node index.js",
+    "dev:api": "cd backend  && npx nodemon index.js",
+    "dev:ui":  "cd frontend && npm run dev"
+  }
+}
