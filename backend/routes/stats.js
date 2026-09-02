@@ -1,14 +1,13 @@
 const express = require('express');
-const router = express.Router();
-const db = require('../db');
+const router  = express.Router();
+const pool    = require('../db');
 
 function r2(n) { return Math.round(n * 100) / 100; }
 
 function getMonday(date = new Date()) {
   const d = new Date(date);
   const day = d.getDay();
-  const diff = (day === 0 ? -6 : 1 - day);
-  d.setDate(d.getDate() + diff);
+  d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day));
   d.setHours(0, 0, 0, 0);
   return d.toISOString().slice(0, 10);
 }
@@ -22,7 +21,7 @@ function computeStreak(dates) {
   for (const d of sorted) {
     if (d === check) {
       streak++;
-      const prev = new Date(check);
+      const prev = new Date(check + 'T00:00:00');
       prev.setDate(prev.getDate() - 1);
       check = prev.toISOString().slice(0, 10);
     } else if (d < check) break;
@@ -30,279 +29,335 @@ function computeStreak(dates) {
   return streak;
 }
 
-function periodStats(actId, from) {
-  const sessions = db.prepare('SELECT COUNT(*) AS n FROM sessions WHERE activity_id=? AND date>=?').get(actId, from).n;
-  const spend    = r2(db.prepare('SELECT COALESCE(SUM(total_cost),0) AS s FROM sessions WHERE activity_id=? AND date>=?').get(actId, from).s);
-  return { sessions, spend };
+async function periodStats(from) {
+  const [{ rows: r1 }, { rows: r2 }] = await Promise.all([
+    pool.query('SELECT COUNT(*) AS n FROM sessions WHERE date>=$1', [from]),
+    pool.query('SELECT COALESCE(SUM(total_cost),0) AS s FROM sessions WHERE date>=$1', [from]),
+  ]);
+  return { sessions: Number(r1[0].n), spend: r2(Number(r2[0].s)) };
 }
 
-// All-activity heatmap (used by both overall and per-activity endpoints)
-function getHeatmapDates() {
-  return db.prepare(`
+async function activityPeriodStats(actId, from) {
+  const [{ rows: r1 }, { rows: r2 }] = await Promise.all([
+    pool.query('SELECT COUNT(*) AS n FROM sessions WHERE activity_id=$1 AND date>=$2', [actId, from]),
+    pool.query('SELECT COALESCE(SUM(total_cost),0) AS s FROM sessions WHERE activity_id=$1 AND date>=$2', [actId, from]),
+  ]);
+  return { sessions: Number(r1[0].n), spend: r2(Number(r2[0].s)) };
+}
+
+async function getHeatmapDates() {
+  const { rows } = await pool.query(`
     SELECT s.date, a.color, a.slug
     FROM sessions s JOIN activities a ON a.id = s.activity_id
     ORDER BY s.date ASC
-  `).all();
+  `);
+  return rows;
 }
 
-// Overall dashboard stats
-router.get('/', (req, res) => {
-  const monday     = getMonday();
-  const monthStart = new Date().toISOString().slice(0, 7) + '-01';
-  const yearStart  = new Date().getFullYear() + '-01-01';
+// ── Overall dashboard stats ───────────────────────────────────
 
-  const total_sessions    = db.prepare('SELECT COUNT(*) AS n FROM sessions').get().n;
-  const total_spend       = db.prepare('SELECT COALESCE(SUM(total_cost),0) AS s FROM sessions').get().s;
-  const active_activities = db.prepare("SELECT COUNT(*) AS n FROM activities WHERE enabled=1").get().n;
+router.get('/', async (req, res) => {
+  try {
+    const monday     = getMonday();
+    const monthStart = new Date().toISOString().slice(0, 7) + '-01';
+    const yearStart  = new Date().getFullYear() + '-01-01';
 
-  const sessions_by_activity = db.prepare(`
-    SELECT a.slug, a.emoji, a.color, a.display_name, COUNT(s.id) AS count
-    FROM activities a
-    LEFT JOIN sessions s ON s.activity_id = a.id
-    WHERE a.enabled=1
-    GROUP BY a.id ORDER BY count DESC
-  `).all();
+    const [
+      { rows: [totals] },
+      { rows: actCount },
+      { rows: byAct },
+      { rows: spendByAct },
+      { rows: recentRows },
+      { rows: allDateRows },
+      weekStats, monthStats, yearStats,
+    ] = await Promise.all([
+      pool.query('SELECT COUNT(*) AS total_sessions, COALESCE(SUM(total_cost),0) AS total_spend FROM sessions'),
+      pool.query("SELECT COUNT(*) AS n FROM activities WHERE enabled=true"),
+      pool.query(`
+        SELECT a.slug, a.emoji, a.color, a.display_name, COUNT(s.id) AS count
+        FROM activities a LEFT JOIN sessions s ON s.activity_id = a.id
+        WHERE a.enabled=true GROUP BY a.id ORDER BY count DESC
+      `),
+      pool.query(`
+        SELECT a.slug, a.emoji, a.color, a.display_name, COALESCE(SUM(s.total_cost),0) AS total
+        FROM activities a LEFT JOIN sessions s ON s.activity_id = a.id
+        WHERE a.enabled=true GROUP BY a.id ORDER BY total DESC
+      `),
+      pool.query(`
+        SELECT s.id, s.date, s.duration_minutes, s.transport_cost, s.total_cost, s.notes, s.data,
+          a.slug AS act_slug, a.emoji AS act_emoji, a.color AS act_color, a.display_name AS act_name
+        FROM sessions s JOIN activities a ON a.id = s.activity_id
+        ORDER BY s.date DESC, s.created_at DESC LIMIT 10
+      `),
+      pool.query('SELECT DISTINCT date FROM sessions ORDER BY date ASC'),
+      periodStats(monday),
+      periodStats(monthStart),
+      periodStats(yearStart),
+    ]);
 
-  const spend_by_activity = db.prepare(`
-    SELECT a.slug, a.emoji, a.color, a.display_name,
-           COALESCE(SUM(s.total_cost),0) AS total
-    FROM activities a
-    LEFT JOIN sessions s ON s.activity_id = a.id
-    WHERE a.enabled=1
-    GROUP BY a.id ORDER BY total DESC
-  `).all();
+    const allDates = allDateRows.map(r => r.date);
+    const current_streak = computeStreak(allDates);
 
-  const recentRows = db.prepare(`
-    SELECT s.*, a.slug AS act_slug, a.emoji AS act_emoji, a.color AS act_color, a.display_name AS act_name
-    FROM sessions s JOIN activities a ON a.id = s.activity_id
-    ORDER BY s.date DESC, s.created_at DESC LIMIT 10
-  `).all();
-
-  const recent_sessions = recentRows.map(row => {
-    const data = JSON.parse(row.data || '{}');
-    return {
-      id: row.id,
-      date: row.date,
+    const recent_sessions = recentRows.map(row => ({
+      id:               row.id,
+      date:             row.date,
       duration_minutes: row.duration_minutes,
-      transport_cost: row.transport_cost,
-      total_cost: row.total_cost,
-      notes: row.notes,
-      data,
+      transport_cost:   row.transport_cost,
+      total_cost:       row.total_cost,
+      notes:            row.notes,
+      data:             row.data || {},
       activity: { slug: row.act_slug, emoji: row.act_emoji, color: row.act_color, display_name: row.act_name },
-    };
-  });
+    }));
 
-  const allDates = db.prepare('SELECT DISTINCT date FROM sessions ORDER BY date ASC').all().map(r => r.date);
-  const current_streak = computeStreak(allDates);
+    const heatmap_dates = await getHeatmapDates();
 
-  // Period-specific all-activity stats
-  const pStats = (from) => ({
-    sessions: db.prepare('SELECT COUNT(*) AS n FROM sessions WHERE date>=?').get(from).n,
-    spend:    r2(db.prepare('SELECT COALESCE(SUM(total_cost),0) AS s FROM sessions WHERE date>=?').get(from).s),
-  });
-
-  res.json({
-    total_sessions,
-    total_spend: r2(total_spend),
-    active_activities,
-    this_week_sessions: pStats(monday).sessions,
-    current_streak,
-    period_stats: {
-      week:  pStats(monday),
-      month: pStats(monthStart),
-      year:  pStats(yearStart),
-    },
-    sessions_by_activity,
-    spend_by_activity,
-    recent_sessions,
-    heatmap_dates: getHeatmapDates(),
-  });
+    res.json({
+      total_sessions:      Number(totals.total_sessions),
+      total_spend:         r2(Number(totals.total_spend)),
+      active_activities:   Number(actCount[0].n),
+      this_week_sessions:  weekStats.sessions,
+      current_streak,
+      period_stats:        { week: weekStats, month: monthStats, year: yearStats },
+      sessions_by_activity: byAct.map(r => ({ ...r, count: Number(r.count) })),
+      spend_by_activity:   spendByAct.map(r => ({ ...r, total: r2(Number(r.total)) })),
+      recent_sessions,
+      heatmap_dates,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// Per-activity stats
-router.get('/:slug', (req, res) => {
-  const act = db.prepare('SELECT * FROM activities WHERE slug=?').get(req.params.slug);
-  if (!act) return res.status(404).json({ error: 'Activity not found' });
+// ── Per-activity stats ────────────────────────────────────────
 
-  const dates = db.prepare(
-    'SELECT date FROM sessions WHERE activity_id=? ORDER BY date ASC'
-  ).all(act.id).map(r => r.date);
+router.get('/:slug', async (req, res) => {
+  try {
+    const { rows: acts } = await pool.query('SELECT * FROM activities WHERE slug=$1', [req.params.slug]);
+    if (!acts.length) return res.status(404).json({ error: 'Activity not found' });
+    const act = acts[0];
 
-  const monthly = db.prepare(`
-    SELECT strftime('%Y-%m', date) AS month,
-           COUNT(*) AS sessions,
-           ROUND(SUM(total_cost), 2) AS total,
-           ROUND(AVG(total_cost), 2) AS avg_session,
-           ROUND(SUM(duration_minutes), 0) AS total_minutes
-    FROM sessions WHERE activity_id=?
-    GROUP BY month ORDER BY month DESC
-  `).all(act.id);
+    const monday     = getMonday();
+    const monthStart = new Date().toISOString().slice(0, 7) + '-01';
+    const yearStart  = new Date().getFullYear() + '-01-01';
 
-  const monday     = getMonday();
-  const monthStart = new Date().toISOString().slice(0, 7) + '-01';
-  const yearStart  = new Date().getFullYear() + '-01-01';
+    const [
+      { rows: dateRows },
+      { rows: monthly },
+      weekStats, monthStats, yearStats,
+      heatmap_dates,
+    ] = await Promise.all([
+      pool.query('SELECT date FROM sessions WHERE activity_id=$1 ORDER BY date ASC', [act.id]),
+      pool.query(`
+        SELECT to_char(date, 'YYYY-MM') AS month,
+               COUNT(*) AS sessions,
+               ROUND(SUM(total_cost)::numeric, 2) AS total,
+               ROUND(AVG(total_cost)::numeric, 2) AS avg_session,
+               ROUND(SUM(duration_minutes)::numeric, 0) AS total_minutes
+        FROM sessions WHERE activity_id=$1
+        GROUP BY to_char(date, 'YYYY-MM')
+        ORDER BY month DESC
+      `, [act.id]),
+      activityPeriodStats(act.id, monday),
+      activityPeriodStats(act.id, monthStart),
+      activityPeriodStats(act.id, yearStart),
+      getHeatmapDates(),
+    ]);
 
-  const ps = {
-    week:  periodStats(act.id, monday),
-    month: periodStats(act.id, monthStart),
-    year:  periodStats(act.id, yearStart),
-  };
+    const dates = dateRows.map(r => r.date);
+    const ps = { week: weekStats, month: monthStats, year: yearStats };
+    const monthlyNorm = monthly.map(m => ({
+      ...m,
+      sessions: Number(m.sessions),
+      total: Number(m.total),
+      avg_session: Number(m.avg_session),
+      total_minutes: Number(m.total_minutes),
+    }));
 
-  const heatmap_dates = getHeatmapDates();
+    // ── Badminton ────────────────────────────────────────────
+    if (act.slug === 'badminton') {
+      const [
+        { rows: equipment },
+        { rows: [rec] },
+        { rows: [courtRow] },
+        { rows: [avgPlayersRow] },
+      ] = await Promise.all([
+        pool.query('SELECT * FROM equipment WHERE activity_id=$1', [act.id]),
+        pool.query(`
+          SELECT
+            COALESCE(SUM((data->>'racket_charge')::numeric), 0) AS total_racket,
+            COALESCE(SUM((data->>'shoe_charge')::numeric),   0) AS total_shoe
+          FROM sessions WHERE activity_id=$1
+        `, [act.id]),
+        pool.query(`
+          SELECT ROUND(COALESCE(SUM((data->>'court_cost')::numeric),0)::numeric, 2) AS v
+          FROM sessions WHERE activity_id=$1
+        `, [act.id]),
+        pool.query(`
+          SELECT ROUND(AVG((data->>'num_other_players')::numeric)::numeric, 1) AS v
+          FROM sessions WHERE activity_id=$1
+        `, [act.id]),
+      ]);
 
-  if (act.slug === 'badminton') {
-    const equipment = db.prepare('SELECT * FROM equipment WHERE activity_id=?').all(act.id);
-    const racket = equipment.find(e => e.name === 'racket');
-    const shoe   = equipment.find(e => e.name === 'shoe');
+      const racket = equipment.find(e => e.name === 'racket');
+      const shoe   = equipment.find(e => e.name === 'shoe');
 
-    const { total_racket, total_shoe } = db.prepare(`
-      SELECT
-        COALESCE(SUM(CAST(json_extract(data,'$.racket_charge') AS REAL)), 0) AS total_racket,
-        COALESCE(SUM(CAST(json_extract(data,'$.shoe_charge')   AS REAL)), 0) AS total_shoe
-      FROM sessions WHERE activity_id=?
-    `).get(act.id);
+      function makeRecovery(equip, recovered) {
+        if (!equip) return null;
+        return {
+          total_cost:     equip.total_cost,
+          recovered:      r2(recovered),
+          remaining:      r2(Math.max(0, equip.total_cost - recovered)),
+          pct:            Math.min(100, r2((recovered / equip.total_cost) * 100)),
+          amort_sessions: equip.amort_sessions,
+        };
+      }
 
-    const makeRecovery = (equip, recovered) => equip ? {
-      total_cost: equip.total_cost,
-      recovered:  r2(recovered),
-      remaining:  r2(Math.max(0, equip.total_cost - recovered)),
-      pct:        Math.min(100, r2((recovered / equip.total_cost) * 100)),
-      amort_sessions: equip.amort_sessions,
-    } : null;
-
-    const total_court = db.prepare(`
-      SELECT ROUND(COALESCE(SUM(CAST(json_extract(data,'$.court_cost') AS REAL)),0),2) AS v
-      FROM sessions WHERE activity_id=?
-    `).get(act.id).v;
-
-    const avg_players = db.prepare(`
-      SELECT ROUND(AVG(CAST(json_extract(data,'$.num_other_players') AS REAL)),1) AS v
-      FROM sessions WHERE activity_id=?
-    `).get(act.id).v;
-
-    return res.json({
-      recovery: {
-        racket: makeRecovery(racket, total_racket),
-        shoe:   makeRecovery(shoe, total_shoe),
-      },
-      monthly, total_court, avg_players: avg_players || 0, dates, equipment,
-      period_stats: ps, heatmap_dates,
-    });
-  }
-
-  if (act.slug === 'swimming') {
-    const { total_distance_m, avg_laps, total_fees } = db.prepare(`
-      SELECT
-        COALESCE(SUM(CAST(json_extract(data,'$.distance_m') AS REAL)), 0) AS total_distance_m,
-        ROUND(AVG(CAST(json_extract(data,'$.laps') AS REAL)), 1) AS avg_laps,
-        COALESCE(SUM(CAST(json_extract(data,'$.entry_fee') AS REAL)), 0) AS total_fees
-      FROM sessions WHERE activity_id=?
-    `).get(act.id);
-
-    const strokeRows = db.prepare(`
-      SELECT json_extract(data,'$.stroke_type') AS stroke, COUNT(*) AS count
-      FROM sessions WHERE activity_id=?
-      GROUP BY stroke
-    `).all(act.id);
-
-    return res.json({
-      total_distance_km: r2((total_distance_m || 0) / 1000),
-      avg_laps: avg_laps || 0,
-      total_fees: r2(total_fees || 0),
-      stroke_breakdown: strokeRows,
-      monthly, dates, period_stats: ps, heatmap_dates,
-    });
-  }
-
-  if (act.slug === 'gym') {
-    const typeRows = db.prepare(`
-      SELECT json_extract(data,'$.session_type') AS session_type, COUNT(*) AS count
-      FROM sessions WHERE activity_id=?
-      GROUP BY session_type
-    `).all(act.id);
-
-    const avg_duration = db.prepare(
-      'SELECT ROUND(AVG(duration_minutes),0) AS v FROM sessions WHERE activity_id=?'
-    ).get(act.id).v || 0;
-
-    return res.json({
-      session_type_breakdown: typeRows,
-      streak: computeStreak(dates),
-      avg_duration_min: avg_duration,
-      monthly, dates, period_stats: ps, heatmap_dates,
-    });
-  }
-
-  if (act.slug === 'run') {
-    const sessions = db.prepare('SELECT data, duration_minutes FROM sessions WHERE activity_id=?').all(act.id);
-    let total_distance = 0;
-    let longest = 0;
-    const paces = [];
-    const runTypes = {};
-    for (const s of sessions) {
-      const d = JSON.parse(s.data || '{}');
-      const dist = parseFloat(d.distance_km) || 0;
-      const secs = parseFloat(d.elapsed_seconds) || 0;
-      total_distance += dist;
-      if (dist > longest) longest = dist;
-      if (dist && secs) paces.push(r2(secs / dist));
-      const rt = d.run_type || 'training';
-      runTypes[rt] = (runTypes[rt] || 0) + 1;
+      return res.json({
+        recovery: {
+          racket: makeRecovery(racket, Number(rec.total_racket)),
+          shoe:   makeRecovery(shoe,   Number(rec.total_shoe)),
+        },
+        monthly: monthlyNorm,
+        total_court:  Number(courtRow.v),
+        avg_players:  Number(avgPlayersRow.v) || 0,
+        dates,
+        equipment,
+        period_stats: ps,
+        heatmap_dates,
+      });
     }
-    const avg_pace = paces.length ? r2(paces.reduce((a, b) => a + b, 0) / paces.length) : null;
-    const best_pace = paces.length ? Math.min(...paces) : null;
 
-    return res.json({
-      total_distance_km: r2(total_distance),
-      avg_pace_sec_per_km: avg_pace,
-      best_pace_sec_per_km: best_pace,
-      longest_run_km: r2(longest),
-      run_type_breakdown: Object.entries(runTypes).map(([run_type, count]) => ({ run_type, count })),
-      monthly, dates, period_stats: ps, heatmap_dates,
-    });
+    // ── Swimming ─────────────────────────────────────────────
+    if (act.slug === 'swimming') {
+      const [
+        { rows: [swimTotals] },
+        { rows: strokeRows },
+      ] = await Promise.all([
+        pool.query(`
+          SELECT
+            COALESCE(SUM((data->>'distance_m')::numeric), 0) AS total_distance_m,
+            ROUND(AVG((data->>'laps')::numeric)::numeric, 1) AS avg_laps,
+            COALESCE(SUM((data->>'entry_fee')::numeric), 0)  AS total_fees
+          FROM sessions WHERE activity_id=$1
+        `, [act.id]),
+        pool.query(`
+          SELECT data->>'stroke_type' AS stroke, COUNT(*) AS count
+          FROM sessions WHERE activity_id=$1 GROUP BY data->>'stroke_type'
+        `, [act.id]),
+      ]);
+
+      return res.json({
+        total_distance_km: r2(Number(swimTotals.total_distance_m || 0) / 1000),
+        avg_laps:          Number(swimTotals.avg_laps) || 0,
+        total_fees:        r2(Number(swimTotals.total_fees) || 0),
+        stroke_breakdown:  strokeRows.map(r => ({ ...r, count: Number(r.count) })),
+        monthly: monthlyNorm, dates, period_stats: ps, heatmap_dates,
+      });
+    }
+
+    // ── Gym ──────────────────────────────────────────────────
+    if (act.slug === 'gym') {
+      const [
+        { rows: typeRows },
+        { rows: [avgDur] },
+      ] = await Promise.all([
+        pool.query(`
+          SELECT data->>'session_type' AS session_type, COUNT(*) AS count
+          FROM sessions WHERE activity_id=$1 GROUP BY data->>'session_type'
+        `, [act.id]),
+        pool.query(
+          'SELECT ROUND(AVG(duration_minutes)::numeric, 0) AS v FROM sessions WHERE activity_id=$1', [act.id]
+        ),
+      ]);
+
+      return res.json({
+        session_type_breakdown: typeRows.map(r => ({ ...r, count: Number(r.count) })),
+        streak: computeStreak(dates),
+        avg_duration_min: Number(avgDur.v) || 0,
+        monthly: monthlyNorm, dates, period_stats: ps, heatmap_dates,
+      });
+    }
+
+    // ── Run ──────────────────────────────────────────────────
+    if (act.slug === 'run') {
+      const { rows: runRows } = await pool.query(
+        'SELECT data, duration_minutes FROM sessions WHERE activity_id=$1', [act.id]
+      );
+      let total_distance = 0, longest = 0;
+      const paces = [];
+      const runTypes = {};
+      for (const s of runRows) {
+        const d   = s.data || {};
+        const dist = parseFloat(d.distance_km) || 0;
+        const secs = parseFloat(d.elapsed_seconds) || 0;
+        total_distance += dist;
+        if (dist > longest) longest = dist;
+        if (dist && secs) paces.push(r2(secs / dist));
+        const rt = d.run_type || 'training';
+        runTypes[rt] = (runTypes[rt] || 0) + 1;
+      }
+      return res.json({
+        total_distance_km:    r2(total_distance),
+        avg_pace_sec_per_km:  paces.length ? r2(paces.reduce((a, b) => a + b, 0) / paces.length) : null,
+        best_pace_sec_per_km: paces.length ? Math.min(...paces) : null,
+        longest_run_km:       r2(longest),
+        run_type_breakdown:   Object.entries(runTypes).map(([run_type, count]) => ({ run_type, count })),
+        monthly: monthlyNorm, dates, period_stats: ps, heatmap_dates,
+      });
+    }
+
+    // ── Cricket ──────────────────────────────────────────────
+    if (act.slug === 'cricket') {
+      const [
+        { rows: equipment },
+        { rows: [cricRec] },
+        { rows: matchTypeRows },
+        { rows: [cricTotals] },
+      ] = await Promise.all([
+        pool.query('SELECT * FROM equipment WHERE activity_id=$1', [act.id]),
+        pool.query(`
+          SELECT
+            COALESCE(SUM((data->>'ball_cost')::numeric),  0) AS total_ball,
+            COALESCE(SUM((data->>'bat_charge')::numeric), 0) AS total_bat
+          FROM sessions WHERE activity_id=$1
+        `, [act.id]),
+        pool.query(`
+          SELECT data->>'match_type' AS match_type, COUNT(*) AS count
+          FROM sessions WHERE activity_id=$1 GROUP BY data->>'match_type'
+        `, [act.id]),
+        pool.query(`
+          SELECT
+            COALESCE(SUM((data->>'overs')::numeric), 0)       AS total_overs,
+            COALESCE(SUM((data->>'ground_cost')::numeric), 0) AS total_ground_fees
+          FROM sessions WHERE activity_id=$1
+        `, [act.id]),
+      ]);
+
+      const bat = equipment.find(e => e.name === 'bat');
+      function makeRecovery(equip, recovered) {
+        if (!equip) return null;
+        return {
+          total_cost: equip.total_cost, recovered: r2(recovered),
+          remaining:  r2(Math.max(0, equip.total_cost - recovered)),
+          pct:        Math.min(100, r2((recovered / equip.total_cost) * 100)),
+          amort_sessions: equip.amort_sessions,
+        };
+      }
+
+      return res.json({
+        recovery: { bat: makeRecovery(bat, Number(cricRec.total_bat)), ball: null },
+        match_type_breakdown: matchTypeRows.map(r => ({ ...r, count: Number(r.count) })),
+        total_overs:       Math.round(Number(cricTotals.total_overs) || 0),
+        total_ground_fees: r2(Number(cricTotals.total_ground_fees) || 0),
+        monthly: monthlyNorm, dates, equipment, period_stats: ps, heatmap_dates,
+      });
+    }
+
+    // ── Custom activity ──────────────────────────────────────
+    res.json({ monthly: monthlyNorm, dates, period_stats: ps, heatmap_dates });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
-
-  if (act.slug === 'cricket') {
-    const equipment = db.prepare('SELECT * FROM equipment WHERE activity_id=?').all(act.id);
-    const bat  = equipment.find(e => e.name === 'bat');
-
-    const { total_ball, total_bat } = db.prepare(`
-      SELECT
-        COALESCE(SUM(CAST(json_extract(data,'$.ball_cost')  AS REAL)), 0) AS total_ball,
-        COALESCE(SUM(CAST(json_extract(data,'$.bat_charge') AS REAL)), 0) AS total_bat
-      FROM sessions WHERE activity_id=?
-    `).get(act.id);
-
-    const makeRecovery = (equip, recovered) => equip ? {
-      total_cost: equip.total_cost, recovered: r2(recovered),
-      remaining: r2(Math.max(0, equip.total_cost - recovered)),
-      pct: Math.min(100, r2((recovered / equip.total_cost) * 100)),
-      amort_sessions: equip.amort_sessions,
-    } : null;
-
-    const matchTypeRows = db.prepare(`
-      SELECT json_extract(data,'$.match_type') AS match_type, COUNT(*) AS count
-      FROM sessions WHERE activity_id=? GROUP BY match_type
-    `).all(act.id);
-
-    const { total_overs, total_ground_fees } = db.prepare(`
-      SELECT
-        COALESCE(SUM(CAST(json_extract(data,'$.overs') AS REAL)),0) AS total_overs,
-        COALESCE(SUM(CAST(json_extract(data,'$.ground_cost') AS REAL)),0) AS total_ground_fees
-      FROM sessions WHERE activity_id=?
-    `).get(act.id);
-
-    return res.json({
-      recovery: { bat: makeRecovery(bat, total_bat), ball: null },
-      match_type_breakdown: matchTypeRows,
-      total_overs: Math.round(total_overs || 0),
-      total_ground_fees: r2(total_ground_fees || 0),
-      monthly, dates, equipment, period_stats: ps, heatmap_dates,
-    });
-  }
-
-  // Custom activity
-  res.json({ monthly, dates, period_stats: ps, heatmap_dates });
 });
 
 module.exports = router;
