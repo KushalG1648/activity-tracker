@@ -119,10 +119,16 @@ export default function SessionDetail() {
   const navigate = useNavigate();
   const { isUnlocked } = useAuth();
   const [session, setSession] = useState(null);
+  const [error, setError] = useState(null);
 
-  useEffect(() => { getSession(id).then(setSession); }, [id]);
+  useEffect(() => {
+    getSession(id)
+      .then(setSession)
+      .catch(err => setError(err.response?.data?.error || err.message || 'Failed to load session'));
+  }, [id]);
 
-  if (!session) return null;
+  if (error) return <div className="card" style={{ color: '#e53e3e', fontFamily: 'monospace', fontSize: '0.85rem' }}><strong>Error:</strong> {error}</div>;
+  if (!session) return <div className="card" style={{ color: 'var(--label-3)' }}>Loading…</div>;
 
   const act = session.activity;
   const d = session.data || {};

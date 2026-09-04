@@ -30,19 +30,19 @@ function computeStreak(dates) {
 }
 
 async function periodStats(from) {
-  const [{ rows: r1 }, { rows: r2 }] = await Promise.all([
+  const [{ rows: cntRows }, { rows: sumRows }] = await Promise.all([
     pool.query('SELECT COUNT(*) AS n FROM sessions WHERE date>=$1', [from]),
     pool.query('SELECT COALESCE(SUM(total_cost),0) AS s FROM sessions WHERE date>=$1', [from]),
   ]);
-  return { sessions: Number(r1[0].n), spend: r2(Number(r2[0].s)) };
+  return { sessions: Number(cntRows[0].n), spend: r2(Number(sumRows[0].s)) };
 }
 
 async function activityPeriodStats(actId, from) {
-  const [{ rows: r1 }, { rows: r2 }] = await Promise.all([
+  const [{ rows: cntRows }, { rows: sumRows }] = await Promise.all([
     pool.query('SELECT COUNT(*) AS n FROM sessions WHERE activity_id=$1 AND date>=$2', [actId, from]),
     pool.query('SELECT COALESCE(SUM(total_cost),0) AS s FROM sessions WHERE activity_id=$1 AND date>=$2', [actId, from]),
   ]);
-  return { sessions: Number(r1[0].n), spend: r2(Number(r2[0].s)) };
+  return { sessions: Number(cntRows[0].n), spend: r2(Number(sumRows[0].s)) };
 }
 
 async function getHeatmapDates() {
