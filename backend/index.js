@@ -22,5 +22,10 @@ if (fs.existsSync(distDir)) {
   app.get('*', (req, res) => res.sendFile(path.join(distDir, 'index.html')));
 }
 
-const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => console.log(`Activity tracker → http://localhost:${PORT}`));
+// Local dev: listen on a port. On Vercel the app is imported as a module, not run directly.
+if (require.main === module) {
+  const PORT = process.env.PORT || 3001;
+  app.listen(PORT, () => console.log(`Activity tracker → http://localhost:${PORT}`));
+}
+
+module.exports = app;
