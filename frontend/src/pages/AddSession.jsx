@@ -7,9 +7,36 @@ import { calcPreview } from '../utils/activityCalc';
 
 const today = new Date().toISOString().slice(0, 10);
 
-function BadmintonFields({ form, set }) {
+function BadmintonFields({ form, set, setForm }) {
+  const isHost = (form.role || 'host') === 'host';
+
   return (
     <>
+      <div className="form-group">
+        <label>Your Role</label>
+        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
+          {['host', 'player'].map(r => (
+            <button
+              key={r}
+              type="button"
+              onClick={() => setForm(f => ({ ...f, role: r }))}
+              style={{
+                flex: 1,
+                padding: '0.45rem 0',
+                borderRadius: 'var(--r-md)',
+                border: '1.5px solid',
+                borderColor: form.role === r || (!form.role && r === 'host') ? 'var(--accent)' : 'var(--border)',
+                background: form.role === r || (!form.role && r === 'host') ? 'var(--accent)' : 'var(--surface-1)',
+                color: form.role === r || (!form.role && r === 'host') ? '#fff' : 'var(--label-2)',
+                fontWeight: 600, fontSize: '0.88rem', cursor: 'pointer',
+              }}
+            >
+              {r === 'host' ? '🏠 Host' : '🏸 Player'}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="form-row">
         <div className="form-group">
           <label>Venue</label>
@@ -20,10 +47,36 @@ function BadmintonFields({ form, set }) {
           <input type="number" value={form.num_other_players || '3'} onChange={set('num_other_players')} min="0" max="20" step="1" />
         </div>
       </div>
-      <div className="form-group">
-        <label>Court Cost (₹)</label>
-        <input type="number" value={form.court_cost || ''} onChange={set('court_cost')} min="0" step="10" placeholder="0" />
-      </div>
+
+      {isHost && (
+        <>
+          <div className="form-group">
+            <label>Court Cost (₹)</label>
+            <input type="number" value={form.court_cost || ''} onChange={set('court_cost')} min="0" step="10" placeholder="0" />
+          </div>
+          <div className="form-group">
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={!!form.shuttle_bought}
+                onChange={e => setForm(f => ({ ...f, shuttle_bought: e.target.checked }))}
+                style={{ width: 'auto', marginRight: '0.1rem' }}
+              />
+              Bought shuttles today
+            </label>
+            {form.shuttle_bought && (
+              <input
+                type="number"
+                value={form.shuttle_cost || ''}
+                onChange={set('shuttle_cost')}
+                min="0" step="10"
+                placeholder="Shuttle cost (₹)"
+                style={{ marginTop: '0.4rem' }}
+              />
+            )}
+          </div>
+        </>
+      )}
     </>
   );
 }
@@ -299,7 +352,8 @@ export default function AddSession() {
     );
   }
 
-  const showGroupSplit = (selectedActivity.slug === 'badminton' || selectedActivity.slug === 'cricket') && preview;
+  const isBadmintonHost = selectedActivity.slug === 'badminton' && (form.role || 'host') === 'host';
+  const showGroupSplit = ((isBadmintonHost || selectedActivity.slug === 'cricket')) && preview;
 
   return (
     <div>
@@ -330,7 +384,7 @@ export default function AddSession() {
               </div>
             </div>
 
-            {selectedActivity.slug === 'badminton' && <BadmintonFields form={form} set={set} />}
+            {selectedActivity.slug === 'badminton' && <BadmintonFields form={form} set={set} setForm={setForm} />}
             {selectedActivity.slug === 'swimming'  && <SwimmingFields  form={form} set={set} />}
             {selectedActivity.slug === 'gym'        && <GymFields       form={form} set={set} />}
             {selectedActivity.slug === 'run'   && <MarathonFields  form={form} set={set} />}
@@ -340,9 +394,15 @@ export default function AddSession() {
             )}
 
             <div className="form-group" style={{ marginTop: '0.25rem' }}>
-              <label>Transport Cost (₹)</label>
+              <label>Transport Cost (₹) <span style={{ color: 'var(--label-4)', fontSize: '0.78rem', fontWeight: 400 }}>optional</span></label>
               <input type="number" value={form.transport_cost} onChange={set('transport_cost')} min="0" step="10" placeholder="0" />
             </div>
+            {selectedActivity.slug === 'badminton' && (
+              <div className="form-group">
+                <label>Miscellaneous (₹) <span style={{ color: 'var(--label-4)', fontSize: '0.78rem', fontWeight: 400 }}>optional</span></label>
+                <input type="number" value={form.misc_cost || ''} onChange={set('misc_cost')} min="0" step="10" placeholder="0" />
+              </div>
+            )}
             <div className="form-group">
               <label>Notes</label>
               <textarea value={form.notes} onChange={set('notes')} rows={2} placeholder="Anything worth noting…" />
@@ -360,22 +420,28 @@ export default function AddSession() {
           {preview ? (
             <>
               <div className="preview-panel">
-                {selectedActivity.slug === 'badminton' && (
-                  <>
-                    {[
-                      ['Court',   parseFloat(form.court_cost) || 0],
-                      ['Transport', parseFloat(form.transport_cost) || 0],
-                      ['Shuttle', preview.shuttle_cost],
-                      ['Racket',  preview.racket_charge],
-                      ['Shoe',    preview.shoe_charge],
-                    ].map(([label, amount]) => (
-                      <div key={label} className="preview-row">
-                        <span style={{ color: 'var(--label-3)' }}>{label}</span>
-                        <span>{amount > 0 ? fmt(amount) : <span style={{ color: 'var(--label-4)', fontSize: '0.8rem' }}>Recovered</span>}</span>
-                      </div>
-                    ))}
-                  </>
-                )}
+                {selectedActivity.slug === 'badminton' && (() => {
+                  const isHost = (form.role || 'host') === 'host';
+                  const rows = [];
+                  if (isHost) rows.push(['Court', parseFloat(form.court_cost) || 0, false]);
+                  const transport = parseFloat(form.transport_cost) || 0;
+                  if (transport > 0) rows.push(['Transport', transport, false]);
+                  const misc = parseFloat(form.misc_cost) || 0;
+                  if (misc > 0) rows.push(['Misc', misc, false]);
+                  if (isHost && form.shuttle_bought) rows.push(['Shuttles', preview.shuttle_cost, false]);
+                  rows.push(['Racket', preview.racket_charge, true]);
+                  rows.push(['Shoe', preview.shoe_charge, true]);
+                  return rows.map(([label, amount, isEquip]) => (
+                    <div key={label} className="preview-row">
+                      <span style={{ color: 'var(--label-3)' }}>{label}</span>
+                      <span>
+                        {isEquip && amount === 0
+                          ? <span style={{ color: 'var(--label-4)', fontSize: '0.8rem' }}>Recovered</span>
+                          : fmt(amount)}
+                      </span>
+                    </div>
+                  ));
+                })()}
                 {selectedActivity.slug === 'cricket' && (
                   <>
                     {[

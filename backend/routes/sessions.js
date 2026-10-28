@@ -178,10 +178,23 @@ router.post('/', async (req, res) => {
     if (activity.slug === 'badminton') {
       const equipment = await getEquipmentForActivity(activity_id);
       const { total_racket, total_shoe } = await getBadmintonRecoveryTotals(activity_id);
-      const charges = computeBadmintonCharges(equipment, duration_minutes, Number(total_racket), Number(total_shoe));
-      data = { ...data, ...charges };
-      const court_cost = parseFloat(activityData.court_cost) || 0;
-      total_cost = r2(Number(transport_cost) + court_cost + charges.shuttle_cost + charges.racket_charge + charges.shoe_charge);
+
+      const racket = equipment.find(e => e.name === 'racket');
+      const shoe   = equipment.find(e => e.name === 'shoe');
+      const racket_per    = racket ? r2(racket.total_cost / racket.amort_sessions) : 0;
+      const racket_rem    = racket ? Math.max(0, racket.total_cost - Number(total_racket)) : 0;
+      const racket_charge = racket_rem > 0 ? Math.min(racket_per, racket_rem) : 0;
+      const shoe_per      = shoe ? r2(shoe.total_cost / shoe.amort_sessions) : 0;
+      const shoe_rem      = shoe ? Math.max(0, shoe.total_cost - Number(total_shoe)) : 0;
+      const shoe_charge   = shoe_rem > 0 ? Math.min(shoe_per, shoe_rem) : 0;
+
+      const isHost       = (activityData.role || 'host') === 'host';
+      const court_cost   = isHost ? (parseFloat(activityData.court_cost) || 0) : 0;
+      const shuttle_cost = (isHost && activityData.shuttle_bought) ? (parseFloat(activityData.shuttle_cost) || 0) : 0;
+      const misc_cost    = parseFloat(activityData.misc_cost) || 0;
+
+      data = { ...data, shuttle_cost: r2(shuttle_cost), racket_charge: r2(racket_charge), shoe_charge: r2(shoe_charge) };
+      total_cost = r2(Number(transport_cost) + court_cost + shuttle_cost + misc_cost + r2(racket_charge) + r2(shoe_charge));
 
     } else if (activity.slug === 'cricket') {
       const equipment = await getEquipmentForActivity(activity_id);

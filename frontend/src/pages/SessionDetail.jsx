@@ -11,13 +11,14 @@ function formatDate(d) {
 
 function BadmintonBreakdown({ session }) {
   const d = session.data || {};
-  const breakdown = [
-    { label: 'Court booking', amount: d.court_cost },
-    { label: 'Transport',     amount: session.transport_cost },
-    { label: `Shuttle (${fmtDuration(session.duration_minutes)})`, amount: d.shuttle_cost },
-    { label: 'Racket recovery', amount: d.racket_charge },
-    { label: 'Shoe recovery',   amount: d.shoe_charge },
-  ].filter(r => r.amount != null);
+  const isHost = (d.role || 'host') === 'host';
+  const breakdown = [];
+  if (isHost && d.court_cost != null) breakdown.push({ label: 'Court booking', amount: d.court_cost });
+  if (session.transport_cost) breakdown.push({ label: 'Transport', amount: session.transport_cost });
+  if (d.misc_cost) breakdown.push({ label: 'Miscellaneous', amount: d.misc_cost });
+  if (isHost && d.shuttle_cost) breakdown.push({ label: 'Shuttles', amount: d.shuttle_cost });
+  if (d.racket_charge != null) breakdown.push({ label: 'Racket recovery', amount: d.racket_charge });
+  if (d.shoe_charge != null) breakdown.push({ label: 'Shoe recovery', amount: d.shoe_charge });
   return <BreakdownTable rows={breakdown} total={session.total_cost} />;
 }
 
@@ -151,12 +152,17 @@ export default function SessionDetail() {
         <button className="btn btn-danger btn-sm" onClick={handleDelete}>Delete</button>
       </div>
 
-      {/* Activity badge */}
+      {/* Activity badge + role badge */}
       {act && (
-        <div style={{ marginBottom: '1rem' }}>
+        <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
           <span className="activity-badge" style={{ background: act.color + '22', color: act.color, fontSize: '0.9rem' }}>
             {act.emoji} {act.display_name}
           </span>
+          {act.slug === 'badminton' && (
+            <span className="activity-badge" style={{ background: 'var(--surface-2)', color: 'var(--label-2)', fontSize: '0.85rem' }}>
+              {(d.role || 'host') === 'host' ? '🏠 Host' : '🏸 Player'}
+            </span>
+          )}
         </div>
       )}
 
@@ -264,7 +270,10 @@ export default function SessionDetail() {
       </div>
 
       {/* Group sport per-player cards */}
-      {(act?.slug === 'badminton' || act?.slug === 'cricket') && (
+      {act?.slug === 'cricket' && (
+        <GroupChargeCards session={session} isUnlocked={isUnlocked} />
+      )}
+      {act?.slug === 'badminton' && (d.role || 'host') === 'host' && (
         <GroupChargeCards session={session} isUnlocked={isUnlocked} />
       )}
     </div>
