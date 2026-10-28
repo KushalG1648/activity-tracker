@@ -51,11 +51,21 @@ const PERIODS = [
 
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
+  const [error, setError] = useState(null);
   const [period, setPeriod] = useState('all');
 
-  useEffect(() => { getStats().then(setStats); }, []);
+  useEffect(() => {
+    getStats()
+      .then(setStats)
+      .catch(err => setError(err.response?.data?.error || err.message || 'Failed to load stats'));
+  }, []);
 
-  if (!stats) return null;
+  if (error) return (
+    <div className="card" style={{ color: '#e53e3e', fontFamily: 'monospace', fontSize: '0.85rem' }}>
+      <strong>API Error:</strong> {error}
+    </div>
+  );
+  if (!stats) return <div className="card" style={{ color: 'var(--label-3)' }}>Loading…</div>;
 
   const {
     total_sessions, total_spend, active_activities, current_streak,

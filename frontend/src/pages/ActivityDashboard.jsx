@@ -562,7 +562,7 @@ function GenericDashboard({ stats, activity }) {
 export default function ActivityDashboard({ slug: propSlug }) {
   const { slug: paramSlug } = useParams();
   const slug = propSlug ?? paramSlug;
-  const { activities } = useActivities();
+  const { activities, error: activitiesError } = useActivities();
   const [stats, setStats] = useState(null);
   const [period, setPeriod] = useState('all');
 
@@ -572,7 +572,8 @@ export default function ActivityDashboard({ slug: propSlug }) {
     if (slug) getActivityStats(slug).then(setStats).catch(() => setStats({}));
   }, [slug]);
 
-  if (!activity || !stats) return null;
+  if (activitiesError) return <div className="card" style={{ color: '#e53e3e', fontFamily: 'monospace', fontSize: '0.85rem' }}><strong>API Error:</strong> {activitiesError}</div>;
+  if (!activity || !stats) return <div className="card" style={{ color: 'var(--label-3)' }}>Loading…</div>;
 
   const ps = stats.period_stats?.[period];
   const periodLabel = PERIODS.find(p => p.key === period)?.label;
