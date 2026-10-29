@@ -1137,3 +1137,213 @@ tr:last-child td { border-bottom: none; }
   color: var(--label-3);
   font-size: 0.75rem;
 }
+
+/* ── Role cards (Badminton Host / Player) ────────── */
+.role-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.role-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 1.4rem 1rem 1.15rem;
+  border-radius: var(--r-lg);
+  border: 2px solid var(--sep-opaque);
+  background: var(--surface-2);
+  cursor: pointer;
+  transition: border-color 0.18s, background 0.18s, box-shadow 0.18s, transform 0.18s cubic-bezier(0.34,1.2,0.64,1);
+  text-align: center;
+  font-family: inherit;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.role-card:hover:not(.active) {
+  border-color: var(--green-mid);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.role-card.active {
+  border-color: var(--green-dark);
+  background: var(--green-dark);
+  box-shadow: 0 8px 28px rgba(27,94,59,0.32), 0 2px 8px rgba(27,94,59,0.14);
+  transform: translateY(-3px);
+}
+
+.role-card-check {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.6rem;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.62rem;
+  color: #fff;
+  font-weight: 800;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.role-card.active .role-card-check { opacity: 1; }
+
+.role-card-icon { font-size: 2rem; line-height: 1; }
+
+.role-card-title {
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--label-1);
+  transition: color 0.18s;
+}
+.role-card.active .role-card-title { color: #fff; }
+
+.role-card-sub {
+  font-size: 0.7rem;
+  color: var(--label-3);
+  line-height: 1.35;
+  transition: color 0.18s;
+}
+.role-card.active .role-card-sub { color: rgba(255,255,255,0.65); }
+
+/* ── Form section divider ────────────────────────── */
+.form-section-label {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: var(--label-4);
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  margin: 1.1rem 0 0.9rem;
+}
+.form-section-label::before,
+.form-section-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--sep-opaque);
+}
+
+/* ── Shuttle toggle pill ─────────────────────────── */
+.shuttle-pill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 1.1rem;
+  background: var(--surface-2);
+  border: 1.5px solid var(--sep-opaque);
+  border-radius: var(--r-lg);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+}
+.shuttle-pill:hover { border-color: var(--green-mid); box-shadow: var(--shadow-xs); }
+.shuttle-pill.on { border-color: var(--green-mid); background: var(--green-tint); }
+
+.shuttle-pill-text { display: flex; flex-direction: column; gap: 0.15rem; }
+.shuttle-pill-label { font-size: 0.88rem; font-weight: 700; color: var(--label-1); letter-spacing: -0.01em; }
+.shuttle-pill-sub { font-size: 0.72rem; color: var(--label-3); }
+
+.toggle-track {
+  flex-shrink: 0;
+  width: 42px;
+  height: 24px;
+  border-radius: 12px;
+  background: var(--sep-opaque);
+  position: relative;
+  transition: background 0.2s;
+}
+.shuttle-pill.on .toggle-track { background: var(--green-sys); }
+
+.toggle-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.22);
+  transition: transform 0.22s cubic-bezier(0.34,1.4,0.64,1);
+}
+.shuttle-pill.on .toggle-thumb { transform: translateX(18px); }
+
+/* ── Badminton preview: cost highlight ───────────── */
+.cost-highlight {
+  background: linear-gradient(135deg, var(--green-dark) 0%, #2d7a52 100%);
+  border-radius: var(--r-lg);
+  padding: 1.2rem 1.35rem;
+  margin-bottom: 1rem;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+.cost-highlight::after {
+  content: '🏸';
+  position: absolute;
+  right: -0.5rem;
+  bottom: -0.75rem;
+  font-size: 4rem;
+  opacity: 0.1;
+  line-height: 1;
+}
+.cost-highlight-label {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.6);
+  margin-bottom: 0.3rem;
+}
+.cost-highlight-amount {
+  font-size: 2.5rem;
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  line-height: 1;
+  color: #fff;
+}
+
+/* ── Preview rows with icon badges ───────────────── */
+.preview-row-icon {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.48rem 0;
+  border-bottom: 1px solid rgba(0,0,0,0.055);
+  font-size: 0.88rem;
+}
+.preview-row-icon:last-child { border-bottom: none; }
+
+.preview-row-left {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: var(--label-2);
+}
+.preview-row-icon-badge {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--sep-opaque);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}

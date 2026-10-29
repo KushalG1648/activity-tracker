@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Badminton — Host/Player UI Test</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --green-dark: #1b5e3b; --green-mid: #2d7a52; --green-sys: #34c759;
+  --green-tint: #f0faf4; --green-tint2: #e3f5ea;
+  --bg: #f5f5f7; --surface: #fff; --surface-2: #f9f9fb;
+  --label-1: #1d1d1f; --label-2: #3c3c43; --label-3: #6e6e73; --label-4: #aeaeb2;
+  --sep: rgba(60,60,67,.10); --sep-opaque: #e5e5ea;
+  --amber: #f59e0b; --amber-tint: #fffbeb; --amber-dark: #92400e;
+  --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-xl: 20px; --r-pill: 50px;
+  --shadow-xs: 0 1px 3px rgba(0,0,0,.06);
+  --shadow-sm: 0 2px 10px rgba(0,0,0,.07),0 1px 3px rgba(0,0,0,.04);
+  --shadow-md: 0 4px 20px rgba(0,0,0,.09),0 2px 6px rgba(0,0,0,.04);
+}
+body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:var(--bg);
+  color:var(--label-1); padding:24px 16px; font-size:16px; -webkit-font-smoothing:antialiased; }
+
+/* Navbar */
+.navbar { background:rgba(27,94,59,.96); height:52px; display:flex; align-items:center;
+  padding:0 2rem; margin:-24px -16px 28px; gap:2rem; }
+.navbar .brand { color:#fff; font-weight:700; font-size:1.05rem; margin-right:auto; letter-spacing:-.02em; }
+.navbar a { color:rgba(255,255,255,.7); text-decoration:none; font-size:.88rem; font-weight:500;
+  padding:.3rem 0; border-bottom:2px solid transparent; }
+.navbar a.active { color:#fff; border-bottom-color:rgba(255,255,255,.6); }
+
+.page-title { font-size:1.75rem; font-weight:700; letter-spacing:-.03em; margin-bottom:1.5rem; }
+.back-link { font-size:.88rem; color:var(--green-mid); font-weight:600; display:block; margin-bottom:1rem; cursor:pointer; }
+
+.layout { display:grid; grid-template-columns:1fr 300px; gap:1.25rem; align-items:start; max-width:840px; margin:0 auto; }
+@media(max-width:680px) { .layout { grid-template-columns:1fr; } }
+
+.card { background:var(--surface); border-radius:var(--r-xl); padding:1.5rem 1.75rem;
+  box-shadow:var(--shadow-sm); border:1px solid rgba(0,0,0,.05); margin-bottom:1.25rem; }
+.card-title { font-size:.72rem; font-weight:700; color:var(--label-3); text-transform:uppercase;
+  letter-spacing:.09em; margin-bottom:1.1rem; }
+
+.form-group { margin-bottom:1rem; }
+.form-group label { display:block; font-size:.78rem; font-weight:600; color:var(--label-3);
+  text-transform:uppercase; letter-spacing:.06em; margin-bottom:.4rem; }
+.form-group input, .form-group select, .form-group textarea {
+  width:100%; padding:.65rem .9rem; background:var(--surface-2); border:1.5px solid var(--sep-opaque);
+  border-radius:var(--r-md); font-size:.95rem; color:var(--label-1); outline:none; font-family:inherit;
+  transition:border-color .15s,box-shadow .15s; }
+.form-group input:focus { border-color:var(--green-mid); box-shadow:0 0 0 4px rgba(45,122,82,.12); }
+.form-row { display:grid; grid-template-columns:1fr 1fr; gap:.9rem; }
+
+/* Role cards */
+.role-cards { display:grid; grid-template-columns:1fr 1fr; gap:.75rem; margin-top:.25rem; }
+.role-card { position:relative; display:flex; flex-direction:column; align-items:center; gap:.45rem;
+  padding:1.4rem 1rem 1.15rem; border-radius:var(--r-lg); border:2px solid var(--sep-opaque);
+  background:var(--surface-2); cursor:pointer;
+  transition:border-color .18s,background .18s,box-shadow .18s,transform .18s cubic-bezier(.34,1.2,.64,1);
+  text-align:center; font-family:inherit; user-select:none; }
+.role-card:hover:not(.active) { border-color:var(--green-mid); box-shadow:var(--shadow-md); transform:translateY(-2px); }
+.role-card.active { border-color:var(--green-dark); background:var(--green-dark);
+  box-shadow:0 8px 28px rgba(27,94,59,.32),0 2px 8px rgba(27,94,59,.14); transform:translateY(-3px); }
+.role-card-check { position:absolute; top:.6rem; right:.6rem; width:20px; height:20px;
+  border-radius:50%; background:rgba(255,255,255,.25); display:flex; align-items:center;
+  justify-content:center; font-size:.62rem; color:#fff; font-weight:800; opacity:0; transition:opacity .2s; }
+.role-card.active .role-card-check { opacity:1; }
+.role-card-icon { font-size:2rem; line-height:1; }
+.role-card-title { font-size:.8rem; font-weight:800; letter-spacing:.09em; text-transform:uppercase;
+  color:var(--label-1); transition:color .18s; }
+.role-card.active .role-card-title { color:#fff; }
+.role-card-sub { font-size:.7rem; color:var(--label-3); line-height:1.35; transition:color .18s; }
+.role-card.active .role-card-sub { color:rgba(255,255,255,.65); }
+
+/* Section divider */
+.form-section-label { display:flex; align-items:center; gap:.65rem; font-size:.66rem; font-weight:700;
+  color:var(--label-4); text-transform:uppercase; letter-spacing:.13em; margin:1.1rem 0 .9rem; }
+.form-section-label::before,.form-section-label::after { content:''; flex:1; height:1px; background:var(--sep-opaque); }
+
+/* Shuttle toggle */
+.shuttle-pill { display:flex; align-items:center; justify-content:space-between; gap:1rem;
+  padding:.9rem 1.1rem; background:var(--surface-2); border:1.5px solid var(--sep-opaque);
+  border-radius:var(--r-lg); cursor:pointer; transition:border-color .15s,background .15s,box-shadow .15s;
+  width:100%; text-align:left; font-family:inherit; }
+.shuttle-pill:hover { border-color:var(--green-mid); box-shadow:var(--shadow-xs); }
+.shuttle-pill.on { border-color:var(--green-mid); background:var(--green-tint); }
+.shuttle-pill-text { display:flex; flex-direction:column; gap:.15rem; }
+.shuttle-pill-label { font-size:.88rem; font-weight:700; color:var(--label-1); letter-spacing:-.01em; }
+.shuttle-pill-sub { font-size:.72rem; color:var(--label-3); }
+.toggle-track { flex-shrink:0; width:42px; height:24px; border-radius:12px; background:var(--sep-opaque);
+  position:relative; transition:background .2s; }
+.shuttle-pill.on .toggle-track { background:var(--green-sys); }
+.toggle-thumb { position:absolute; top:3px; left:3px; width:18px; height:18px; border-radius:50%;
+  background:#fff; box-shadow:0 1px 4px rgba(0,0,0,.22);
+  transition:transform .22s cubic-bezier(.34,1.4,.64,1); }
+.shuttle-pill.on .toggle-thumb { transform:translateX(18px); }
+
+/* Cost highlight */
+.cost-highlight { background:linear-gradient(135deg,var(--green-dark) 0%,#2d7a52 100%);
+  border-radius:var(--r-lg); padding:1.2rem 1.35rem; margin-bottom:1rem; text-align:center;
+  position:relative; overflow:hidden; }
+.cost-highlight::after { content:'🏸'; position:absolute; right:-.5rem; bottom:-.75rem;
+  font-size:4rem; opacity:.1; line-height:1; }
+.cost-highlight-label { font-size:.62rem; font-weight:700; letter-spacing:.13em;
+  text-transform:uppercase; color:rgba(255,255,255,.6); margin-bottom:.3rem; }
+.cost-highlight-amount { font-size:2.5rem; font-weight:800; letter-spacing:-.045em; line-height:1; color:#fff; }
+
+/* Preview rows with icons */
+.preview-row-icon { display:flex; justify-content:space-between; align-items:center;
+  padding:.48rem 0; border-bottom:1px solid rgba(0,0,0,.055); font-size:.88rem; }
+.preview-row-icon:last-child { border-bottom:none; }
+.preview-row-left { display:flex; align-items:center; gap:.55rem; color:var(--label-2); }
+.preview-row-icon-badge { width:28px; height:28px; border-radius:var(--r-sm); background:var(--surface-2);
+  border:1px solid var(--sep-opaque); display:flex; align-items:center; justify-content:center;
+  font-size:.85rem; flex-shrink:0; }
+
+/* Mode cards */
+.mode-cards { display:grid; grid-template-columns:1fr 1fr; gap:.75rem; margin-top:.75rem; }
+.mode-card { border-radius:var(--r-lg); padding:1rem .9rem; background:var(--surface-2);
+  border:1px solid var(--sep-opaque); border-top-width:4px; text-align:center; }
+.mode-card.fair { border-top-color:var(--green-sys); }
+.mode-card.adv  { border-top-color:var(--amber); }
+.mode-label { font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.09em;
+  color:var(--label-3); margin-bottom:.4rem; }
+.mode-amount { font-size:1.5rem; font-weight:800; letter-spacing:-.03em; color:var(--label-1); margin-bottom:.25rem; }
+.mode-sub { font-size:.78rem; color:var(--label-3); }
+
+.player-note { margin-top:.9rem; padding:.8rem 1rem; background:#eff6ff; border-radius:var(--r-md);
+  border:1px solid #bfdbfe; font-size:.82rem; color:#1d4ed8; line-height:1.5; }
+
+/* Submit */
+.btn-submit { width:100%; padding:.7rem; background:var(--green-dark); color:#fff; border:none;
+  border-radius:var(--r-pill); font-size:.95rem; font-weight:700; cursor:pointer;
+  margin-top:.5rem; transition:opacity .15s; letter-spacing:-.01em; }
+.btn-submit:hover { opacity:.88; }
+
+.recovered { color:var(--label-4); font-size:.78rem; font-weight:500; }
+
+.toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
+  background:#111; color:#fff; padding:.65rem 1.25rem; border-radius:999px;
+  font-size:.88rem; font-weight:600; opacity:0; transition:opacity .3s;
+  pointer-events:none; z-index:99; white-space:nowrap; }
+.toast.show { opacity:1; }
+</style>
+</head>
+<body>
+
+<div class="navbar">
+  <span class="brand">🏃 Activity Tracker</span>
+  <a href="#">Dashboard</a>
+  <a href="#" class="active">Sessions</a>
+  <a href="#">Activities</a>
+</div>
+
+<div style="max-width:840px;margin:0 auto">
+  <div class="back-link">← Change Activity</div>
+  <div class="page-title"><span style="color:#22c55e">🏸</span> Log Badminton</div>
+</div>
+
+<div class="layout">
+
+  <!-- FORM -->
+  <div class="card">
+    <form onsubmit="handleSubmit(event)">
+
+      <!-- Date / Duration -->
+      <div class="form-row">
+        <div class="form-group">
+          <label>Date</label>
+          <input type="date" id="date" value="2026-10-30" required />
+        </div>
+        <div class="form-group">
+          <label>Duration (minutes)</label>
+          <input type="number" id="duration" value="60" min="5" max="480" step="5" oninput="update()" />
+        </div>
+      </div>
+
+      <!-- Role cards -->
+      <div class="form-group">
+        <label>Your Role</label>
+        <div class="role-cards">
+          <button type="button" class="role-card active" id="card-host" onclick="setRole('host')">
+            <div class="role-card-check">✓</div>
+            <div class="role-card-icon">🏠</div>
+            <div class="role-card-title">Host</div>
+            <div class="role-card-sub">You booked the court &amp; buy shuttles</div>
+          </button>
+          <button type="button" class="role-card" id="card-player" onclick="setRole('player')">
+            <div class="role-card-check">✓</div>
+            <div class="role-card-icon">🏸</div>
+            <div class="role-card-title">Player</div>
+            <div class="role-card-sub">You just showed up &amp; played</div>
+          </button>
+        </div>
+      </div>
+
+      <!-- Game info -->
+      <div class="form-section-label">Game Info</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Venue</label>
+          <input type="text" id="venue" placeholder="e.g. Sports Arena" />
+        </div>
+        <div class="form-group">
+          <label>Other Players</label>
+          <input type="number" id="num_players" value="3" min="0" max="20" step="1" oninput="update()" />
+        </div>
+      </div>
+
+      <!-- Host costs -->
+      <div id="host-fields">
+        <div class="form-section-label">Host Costs</div>
+        <div class="form-group">
+          <label>Court Cost (₹)</label>
+          <input type="number" id="court_cost" placeholder="0" min="0" step="10" oninput="update()" />
+        </div>
+        <div class="form-group">
+          <label>Shuttles</label>
+          <button type="button" class="shuttle-pill" id="shuttle-pill" onclick="toggleShuttle()">
+            <div class="shuttle-pill-text">
+              <div class="shuttle-pill-label">Bought shuttles today</div>
+              <div class="shuttle-pill-sub" id="shuttle-sub">Tap to mark as purchased</div>
+            </div>
+            <div class="toggle-track"><div class="toggle-thumb" id="shuttle-thumb"></div></div>
+          </button>
+          <div id="shuttle-cost-wrap" style="display:none">
+            <input type="number" id="shuttle_cost" placeholder="Shuttle cost (₹)" min="0" step="10"
+              oninput="update()" style="margin-top:.5rem" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Personal costs -->
+      <div class="form-section-label">Personal Costs</div>
+      <div class="form-group">
+        <label>Transport Cost (₹) <span style="color:var(--label-4);font-size:.75rem;font-weight:400;text-transform:none;letter-spacing:0">optional</span></label>
+        <input type="number" id="transport" placeholder="0" min="0" step="10" oninput="update()" />
+      </div>
+      <div class="form-group" id="misc-wrap">
+        <label>Miscellaneous (₹) <span style="color:var(--label-4);font-size:.75rem;font-weight:400;text-transform:none;letter-spacing:0">optional</span></label>
+        <input type="number" id="misc" placeholder="0" min="0" step="10" oninput="update()" />
+      </div>
+      <div class="form-group">
+        <label>Notes</label>
+        <textarea id="notes" rows="2" placeholder="Anything worth noting…"></textarea>
+      </div>
+
+      <button type="submit" class="btn-submit">Save Session</button>
+    </form>
+  </div>
+
+  <!-- LIVE PREVIEW -->
+  <div class="card">
+    <div class="card-title">Live Preview</div>
+    <div id="preview-content"></div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  // Equipment — edit these to match your actual settings
+  const EQ = { racket: { total_cost: 3000, amort_sessions: 44 }, shoe: { total_cost: 4000, amort_sessions: 88 } };
+  const RECOVERY = { total_racket: 0, total_shoe: 0 };
+
+  let role = 'host';
+  let shuttleOn = false;
+
+  const r2  = n => Math.round(n * 100) / 100;
+  const fmt = n => '₹' + (n || 0).toFixed(2);
+  const v   = id => parseFloat(document.getElementById(id)?.value) || 0;
+
+  function setRole(r) {
+    role = r;
+    document.getElementById('card-host').classList.toggle('active', r === 'host');
+    document.getElementById('card-player').classList.toggle('active', r === 'player');
+    document.getElementById('host-fields').style.display = r === 'host' ? '' : 'none';
+    if (r === 'player') { shuttleOn = false; syncShuttle(); }
+    update();
+  }
+
+  function toggleShuttle() {
+    shuttleOn = !shuttleOn;
+    syncShuttle();
+    update();
+  }
+
+  function syncShuttle() {
+    const pill = document.getElementById('shuttle-pill');
+    pill.classList.toggle('on', shuttleOn);
+    document.getElementById('shuttle-sub').textContent = shuttleOn ? 'Enter the cost below ↓' : 'Tap to mark as purchased';
+    document.getElementById('shuttle-cost-wrap').style.display = shuttleOn ? '' : 'none';
+  }
+
+  function calc() {
+    const isHost = role === 'host';
+    const N = parseInt(document.getElementById('num_players').value) || 0;
+    const C = isHost ? v('court_cost') : 0;
+    const P = v('transport');
+    const M = v('misc');
+    const shuttle = (isHost && shuttleOn) ? v('shuttle_cost') : 0;
+
+    const r_rem = Math.max(0, EQ.racket.total_cost - RECOVERY.total_racket);
+    const racket = r_rem > 0 ? Math.min(r2(EQ.racket.total_cost / EQ.racket.amort_sessions), r_rem) : 0;
+    const s_rem = Math.max(0, EQ.shoe.total_cost - RECOVERY.total_shoe);
+    const shoe  = s_rem > 0 ? Math.min(r2(EQ.shoe.total_cost / EQ.shoe.amort_sessions), s_rem) : 0;
+
+    const total = r2(C + P + M + shuttle + racket + shoe);
+    return { isHost, N, C, P, M, shuttle, racket, shoe, total };
+  }
+
+  function update() {
+    const p = calc();
+
+    const rows = [
+      p.isHost && { icon: '🏟️', label: 'Court',     amount: p.C,       equip: false },
+      p.P > 0  && { icon: '🚗', label: 'Transport', amount: p.P,       equip: false },
+      p.M > 0  && { icon: '📎', label: 'Misc',      amount: p.M,       equip: false },
+      (p.isHost && shuttleOn) && { icon: '🏸', label: 'Shuttles',  amount: p.shuttle,   equip: false },
+      { icon: '🎾', label: 'Racket',    amount: p.racket, equip: true },
+      { icon: '👟', label: 'Shoe',      amount: p.shoe,   equip: true },
+    ].filter(Boolean);
+
+    const label = p.isHost ? '🏠 Host' : '🏸 Player';
+
+    let html = `
+      <div class="cost-highlight">
+        <div class="cost-highlight-label">${label} · My Total</div>
+        <div class="cost-highlight-amount">${fmt(p.total)}</div>
+      </div>
+      <div style="margin-bottom:.5rem">
+    `;
+
+    rows.forEach(({ icon, label, amount, equip }) => {
+      const val = equip && amount === 0
+        ? '<span class="recovered">Recovered</span>'
+        : `<span style="font-weight:600;font-variant-numeric:tabular-nums">${fmt(amount)}</span>`;
+      html += `
+        <div class="preview-row-icon">
+          <div class="preview-row-left">
+            <div class="preview-row-icon-badge">${icon}</div>
+            <span>${label}</span>
+          </div>
+          ${val}
+        </div>`;
+    });
+
+    html += '</div>';
+
+    if (p.isHost) {
+      const fair = r2(p.total / (p.N + 1));
+      const adv  = p.N > 0 ? r2(p.total / p.N) : null;
+      html += `<div class="mode-cards">
+        <div class="mode-card fair">
+          <div class="mode-label">Fair</div>
+          <div class="mode-amount">${fmt(fair)}</div>
+          <div class="mode-sub">per player · ${p.N + 1} ways</div>
+        </div>
+        <div class="mode-card adv">
+          <div class="mode-label">Advantageous</div>
+          <div class="mode-amount">${adv != null ? fmt(adv) : '—'}</div>
+          <div class="mode-sub">${adv != null ? `per player · ${p.N} ways` : 'no others'}</div>
+        </div>
+      </div>`;
+    } else {
+      html += `<div class="player-note">
+        As a <strong>player</strong>, you only track equipment wear &amp; travel.
+        Court and shuttle costs are the host's responsibility.
+      </div>`;
+    }
+
+    document.getElementById('preview-content').innerHTML = html;
+  }
+
+  function handleSubmit(e) {
+    e.preventDefault();
+    const p = calc();
+    const t = document.getElementById('toast');
+    t.textContent = `Saved (demo) · ${role === 'host' ? '🏠 Host' : '🏸 Player'} · Total: ${fmt(p.total)}`;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2500);
+  }
+
+  update();
+</script>
+</body>
+</html>

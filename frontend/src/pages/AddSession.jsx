@@ -12,30 +12,30 @@ function BadmintonFields({ form, set, setForm }) {
 
   return (
     <>
+      {/* Role selector */}
       <div className="form-group">
         <label>Your Role</label>
-        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
-          {['host', 'player'].map(r => (
+        <div className="role-cards">
+          {[
+            { r: 'host',   icon: '🏠', title: 'Host',   sub: 'You booked the court & buy shuttles' },
+            { r: 'player', icon: '🏸', title: 'Player', sub: 'You just showed up & played' },
+          ].map(({ r, icon, title, sub }) => (
             <button
               key={r}
               type="button"
+              className={`role-card${(form.role || 'host') === r ? ' active' : ''}`}
               onClick={() => setForm(f => ({ ...f, role: r }))}
-              style={{
-                flex: 1,
-                padding: '0.45rem 0',
-                borderRadius: 'var(--r-md)',
-                border: '1.5px solid',
-                borderColor: form.role === r || (!form.role && r === 'host') ? 'var(--accent)' : 'var(--border)',
-                background: form.role === r || (!form.role && r === 'host') ? 'var(--accent)' : 'var(--surface-1)',
-                color: form.role === r || (!form.role && r === 'host') ? '#fff' : 'var(--label-2)',
-                fontWeight: 600, fontSize: '0.88rem', cursor: 'pointer',
-              }}
             >
-              {r === 'host' ? '🏠 Host' : '🏸 Player'}
+              <div className="role-card-check">✓</div>
+              <div className="role-card-icon">{icon}</div>
+              <div className="role-card-title">{title}</div>
+              <div className="role-card-sub">{sub}</div>
             </button>
           ))}
         </div>
       </div>
+
+      <div className="form-section-label">Game Info</div>
 
       <div className="form-row">
         <div className="form-group">
@@ -50,20 +50,26 @@ function BadmintonFields({ form, set, setForm }) {
 
       {isHost && (
         <>
+          <div className="form-section-label">Host Costs</div>
           <div className="form-group">
             <label>Court Cost (₹)</label>
             <input type="number" value={form.court_cost || ''} onChange={set('court_cost')} min="0" step="10" placeholder="0" />
           </div>
           <div className="form-group">
-            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={!!form.shuttle_bought}
-                onChange={e => setForm(f => ({ ...f, shuttle_bought: e.target.checked }))}
-                style={{ width: 'auto', marginRight: '0.1rem' }}
-              />
-              Bought shuttles today
-            </label>
+            <label>Shuttles</label>
+            <button
+              type="button"
+              className={`shuttle-pill${form.shuttle_bought ? ' on' : ''}`}
+              onClick={() => setForm(f => ({ ...f, shuttle_bought: !f.shuttle_bought }))}
+            >
+              <div className="shuttle-pill-text">
+                <div className="shuttle-pill-label">Bought shuttles today</div>
+                <div className="shuttle-pill-sub">
+                  {form.shuttle_bought ? 'Enter the cost below ↓' : 'Tap to mark as purchased'}
+                </div>
+              </div>
+              <div className="toggle-track"><div className="toggle-thumb" /></div>
+            </button>
             {form.shuttle_bought && (
               <input
                 type="number"
@@ -71,7 +77,7 @@ function BadmintonFields({ form, set, setForm }) {
                 onChange={set('shuttle_cost')}
                 min="0" step="10"
                 placeholder="Shuttle cost (₹)"
-                style={{ marginTop: '0.4rem' }}
+                style={{ marginTop: '0.5rem' }}
               />
             )}
           </div>
@@ -393,7 +399,11 @@ export default function AddSession() {
               <CustomFields form={form} set={set} />
             )}
 
-            <div className="form-group" style={{ marginTop: '0.25rem' }}>
+            {selectedActivity.slug === 'badminton'
+              ? <div className="form-section-label">Personal Costs</div>
+              : <div style={{ marginTop: '0.25rem' }} />
+            }
+            <div className="form-group">
               <label>Transport Cost (₹) <span style={{ color: 'var(--label-4)', fontSize: '0.78rem', fontWeight: 400 }}>optional</span></label>
               <input type="number" value={form.transport_cost} onChange={set('transport_cost')} min="0" step="10" placeholder="0" />
             </div>
@@ -419,79 +429,111 @@ export default function AddSession() {
           <div className="card-title">Live Preview</div>
           {preview ? (
             <>
-              <div className="preview-panel">
-                {selectedActivity.slug === 'badminton' && (() => {
-                  const isHost = (form.role || 'host') === 'host';
-                  const rows = [];
-                  if (isHost) rows.push(['Court', parseFloat(form.court_cost) || 0, false]);
-                  const transport = parseFloat(form.transport_cost) || 0;
-                  if (transport > 0) rows.push(['Transport', transport, false]);
-                  const misc = parseFloat(form.misc_cost) || 0;
-                  if (misc > 0) rows.push(['Misc', misc, false]);
-                  if (isHost && form.shuttle_bought) rows.push(['Shuttles', preview.shuttle_cost, false]);
-                  rows.push(['Racket', preview.racket_charge, true]);
-                  rows.push(['Shoe', preview.shoe_charge, true]);
-                  return rows.map(([label, amount, isEquip]) => (
-                    <div key={label} className="preview-row">
-                      <span style={{ color: 'var(--label-3)' }}>{label}</span>
-                      <span>
-                        {isEquip && amount === 0
-                          ? <span style={{ color: 'var(--label-4)', fontSize: '0.8rem' }}>Recovered</span>
-                          : fmt(amount)}
-                      </span>
-                    </div>
-                  ));
-                })()}
-                {selectedActivity.slug === 'cricket' && (
+              {selectedActivity.slug === 'badminton' ? (() => {
+                const isHost = (form.role || 'host') === 'host';
+                const badmintonRows = [
+                  isHost && { icon: '🏟️', label: 'Court',     amount: parseFloat(form.court_cost) || 0,     equip: false },
+                  (parseFloat(form.transport_cost) || 0) > 0 && { icon: '🚗', label: 'Transport', amount: parseFloat(form.transport_cost) || 0, equip: false },
+                  (parseFloat(form.misc_cost) || 0) > 0 && { icon: '📎', label: 'Misc', amount: parseFloat(form.misc_cost) || 0, equip: false },
+                  (isHost && form.shuttle_bought) && { icon: '🏸', label: 'Shuttles',  amount: preview.shuttle_cost,   equip: false },
+                  { icon: '🎾', label: 'Racket',    amount: preview.racket_charge, equip: true  },
+                  { icon: '👟', label: 'Shoe',      amount: preview.shoe_charge,   equip: true  },
+                ].filter(Boolean);
+                return (
                   <>
-                    {[
-                      ['Ground',    parseFloat(form.ground_cost) || 0],
-                      ['Transport', parseFloat(form.transport_cost) || 0],
-                      ['Ball',      preview.ball_cost],
-                      ['Bat',       preview.bat_charge],
-                    ].map(([label, amount]) => (
-                      <div key={label} className="preview-row">
-                        <span style={{ color: 'var(--label-3)' }}>{label}</span>
-                        <span>{amount > 0 ? fmt(amount) : <span style={{ color: 'var(--label-4)', fontSize: '0.8rem' }}>Recovered</span>}</span>
+                    <div className="cost-highlight">
+                      <div className="cost-highlight-label">{isHost ? '🏠 Host' : '🏸 Player'} · My Total</div>
+                      <div className="cost-highlight-amount">{fmt(preview.session_total)}</div>
+                    </div>
+                    <div style={{ marginBottom: '0.5rem' }}>
+                      {badmintonRows.map(({ icon, label, amount, equip }) => (
+                        <div key={label} className="preview-row-icon">
+                          <div className="preview-row-left">
+                            <div className="preview-row-icon-badge">{icon}</div>
+                            <span>{label}</span>
+                          </div>
+                          <span style={{ fontWeight: 600, fontSize: '0.9rem', fontVariantNumeric: 'tabular-nums' }}>
+                            {equip && amount === 0
+                              ? <span style={{ color: 'var(--label-4)', fontSize: '0.78rem', fontWeight: 500 }}>Recovered</span>
+                              : fmt(amount)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    {showGroupSplit && (
+                      <div className={isUnlocked ? 'mode-cards' : ''} style={{ marginTop: '0.75rem' }}>
+                        <div className="mode-card fair" style={{ padding: '1rem 0.9rem' }}>
+                          <div className="mode-label">Fair</div>
+                          <div className="mode-amount" style={{ fontSize: '1.5rem' }}>{fmt(preview.per_player_fair)}</div>
+                          <div className="mode-sub">per player</div>
+                        </div>
+                        {isUnlocked && (
+                          <div className="mode-card adv" style={{ padding: '1rem 0.9rem' }}>
+                            <div className="mode-label">Advantageous</div>
+                            <div className="mode-amount" style={{ fontSize: '1.5rem' }}>
+                              {preview.per_player_adv != null ? fmt(preview.per_player_adv) : '—'}
+                            </div>
+                            <div className="mode-sub">per player</div>
+                          </div>
+                        )}
                       </div>
-                    ))}
+                    )}
                   </>
-                )}
-                {!['badminton','cricket'].includes(selectedActivity.slug) && (
-                  <>
-                    <div className="preview-row">
-                      <span style={{ color: 'var(--label-3)' }}>Entry Fee</span>
-                      <span>{fmt(parseFloat(form.entry_fee) || 0)}</span>
+                );
+              })() : (
+                <>
+                  <div className="preview-panel">
+                    {selectedActivity.slug === 'cricket' && (
+                      <>
+                        {[
+                          ['Ground',    parseFloat(form.ground_cost) || 0],
+                          ['Transport', parseFloat(form.transport_cost) || 0],
+                          ['Ball',      preview.ball_cost],
+                          ['Bat',       preview.bat_charge],
+                        ].map(([label, amount]) => (
+                          <div key={label} className="preview-row">
+                            <span style={{ color: 'var(--label-3)' }}>{label}</span>
+                            <span>{amount > 0 ? fmt(amount) : <span style={{ color: 'var(--label-4)', fontSize: '0.8rem' }}>Recovered</span>}</span>
+                          </div>
+                        ))}
+                      </>
+                    )}
+                    {!['badminton','cricket'].includes(selectedActivity.slug) && (
+                      <>
+                        <div className="preview-row">
+                          <span style={{ color: 'var(--label-3)' }}>Entry Fee</span>
+                          <span>{fmt(parseFloat(form.entry_fee) || 0)}</span>
+                        </div>
+                        <div className="preview-row">
+                          <span style={{ color: 'var(--label-3)' }}>Transport</span>
+                          <span>{fmt(parseFloat(form.transport_cost) || 0)}</span>
+                        </div>
+                      </>
+                    )}
+                    <div className="preview-row total">
+                      <span>Total</span>
+                      <span>{fmt(preview.session_total)}</span>
                     </div>
-                    <div className="preview-row">
-                      <span style={{ color: 'var(--label-3)' }}>Transport</span>
-                      <span>{fmt(parseFloat(form.transport_cost) || 0)}</span>
-                    </div>
-                  </>
-                )}
-                <div className="preview-row total">
-                  <span>Total</span>
-                  <span>{fmt(preview.session_total)}</span>
-                </div>
-              </div>
-
-              {showGroupSplit && (
-                <div className={isUnlocked ? 'mode-cards' : ''} style={{ marginTop: '0.9rem' }}>
-                  <div className="mode-card fair" style={{ padding: '1rem 0.9rem' }}>
-                    <div className="mode-label">Fair</div>
-                    <div className="mode-amount" style={{ fontSize: '1.5rem' }}>{fmt(preview.per_player_fair)}</div>
-                    <div className="mode-sub">per player</div>
                   </div>
-                  {isUnlocked && (
-                    <div className="mode-card adv" style={{ padding: '1rem 0.9rem' }}>
-                      <div className="mode-label">Advantageous</div>
-                      <div className="mode-amount" style={{ fontSize: '1.5rem' }}>
-                        {preview.per_player_adv != null ? fmt(preview.per_player_adv) : '—'}
+                  {showGroupSplit && (
+                    <div className={isUnlocked ? 'mode-cards' : ''} style={{ marginTop: '0.9rem' }}>
+                      <div className="mode-card fair" style={{ padding: '1rem 0.9rem' }}>
+                        <div className="mode-label">Fair</div>
+                        <div className="mode-amount" style={{ fontSize: '1.5rem' }}>{fmt(preview.per_player_fair)}</div>
+                        <div className="mode-sub">per player</div>
                       </div>
-                      <div className="mode-sub">per player</div>
+                      {isUnlocked && (
+                        <div className="mode-card adv" style={{ padding: '1rem 0.9rem' }}>
+                          <div className="mode-label">Advantageous</div>
+                          <div className="mode-amount" style={{ fontSize: '1.5rem' }}>
+                            {preview.per_player_adv != null ? fmt(preview.per_player_adv) : '—'}
+                          </div>
+                          <div className="mode-sub">per player</div>
+                        </div>
+                      )}
                     </div>
                   )}
-                </div>
+                </>
               )}
 
               {selectedActivity.slug === 'run' && form.distance_km && form.time_str && (() => {
